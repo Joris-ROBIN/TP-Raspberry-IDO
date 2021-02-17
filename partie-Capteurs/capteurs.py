@@ -3,13 +3,7 @@ import time
 import paho.mqtt.client as mqtt
 import os
 from math import *
-
-def on_connect(client, userdata, flags, rc):
-	if rc==0:
-		client.connected_flag=True
-		print("Connexion OK")
-	else:
-		print("Mauvaise Connexion Returned code=",rc)
+import ssl
 
 
 monIP = os.popen('ip a s dev eth0 | grep -oE "inet .*/16" | sed "s/inet //" | sed "s/\/16//"').read().split('\n')[0]
@@ -18,27 +12,36 @@ finIP = monIP.split('.')[::-1][0]
 sense = SenseHat()
 
 
-dernierePositionJoystick = ""
+def on_connect(client, userdata, flags, rc):
+	if rc==0:
+		client.connected_flag=True
+		print("Connexion OK")
+	else:
+		print("Mauvaise Connexion Returned code=",rc)
 
-
-broker_address="10.202.10.1"
+broker_address="10.202.9.1"
 client = mqtt.Client("P1")
-client.connected_flag=False#create flag in class
+client.connected_flag=False
 
-client.on_connect=on_connect  #bind call back
+client.on_connect=on_connect
 client.loop_start()
-
 
 client.username_pw_set(username="ido",password="lpido")
 
 print("Connexion au broker ",broker_address)
 
-client.connect(broker_address)
+client.tls_set(ca_certs="/home/pi/ca.crt")
+client.tls_insecure_set(True)
+
+client.connect(broker_address,8883)
 
 while not client.connected_flag:
     print("En attente de connexion au broker")
     time.sleep(1)
 client.loop_stop()
+
+
+dernierePositionJoystick = ""
 
 def joystick_up():
 	global dernierePositionJoystick
@@ -86,10 +89,13 @@ sense.stick.direction_left = joystick_left
 sense.stick.direction_right = joystick_right
 sense.stick.direction_middle = joystick_middle
 
+
 while 1:
 	temperature = sense.get_temperature()
 	pression = sense.get_pressure()
 	humidite = sense.get_humidity()
+
+
 	orientation = sense.get_orientation()
 
 	roulis = orientation["roll"]
@@ -99,6 +105,7 @@ while 1:
 	roulis = round(roulis, 1)
 	tangage = round(tangage, 1)
 	lacet = round(lacet, 1)
+
 
 	coord_acceleration = sense.get_accelerometer_raw()
 	x = coord_acceleration['x']
@@ -110,13 +117,6 @@ while 1:
 	z=round(z, 0)
 
 	acceleration = round(abs(sqrt(x**2+y**2+z**2)-1),2)
-
-	# print("Temperature : {:.2f}   C".format(temperature))
-	# print("Pression    : {:.2f} hPa".format(pression))
-	# print("Humidite    : {:.2f}   %".format(humidite))
-	# print("Roulis      : {:.0f}".format(roulis))
-	# print("Tangage     : {:.0f}".format(tangage))
-	# print("Lacet       : {:.0f}".format(lacet))
 
 
 	print("rasp-{}/temperature <- {}".format(finIP,temperature))
@@ -139,6 +139,7 @@ while 1:
 
 	print("rasp-{}/acceleration <- {}".format(finIP,acceleration))
 	client.publish("rasp-{}/acceleration".format(finIP),acceleration)
+
 
 	print
 	time.sleep(1)
